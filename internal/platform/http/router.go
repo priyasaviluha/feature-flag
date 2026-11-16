@@ -6,6 +6,7 @@ import (
 	"flag_backend/internal/config"
 	"flag_backend/internal/middleware"
 	"flag_backend/internal/modules/admin"
+	"flag_backend/internal/modules/apikey"
 	"flag_backend/internal/modules/configuration"
 	"flag_backend/internal/modules/environment"
 	"flag_backend/internal/modules/feature"
@@ -52,5 +53,13 @@ func NewRouter(db *pgxpool.Pool, cfg config.Config) http.Handler {
 	featureRoutes.HandleFunc("DELETE /api/features/{id}", featureHandler.Archive)
 	router.Handle("/api/features", middleware.Authenticate([]byte(cfg.JWTSecret))(featureRoutes))
 	router.Handle("/api/features/", middleware.Authenticate([]byte(cfg.JWTSecret))(featureRoutes))
+	apiKeyRepository := apikey.NewRepository(db)
+	apiKeyHandler := apikey.NewHandler(apikey.NewService(apiKeyRepository))
+	apiKeyRoutes := http.NewServeMux()
+	apiKeyRoutes.HandleFunc("POST /api-keys", apiKeyHandler.Create)
+	apiKeyRoutes.HandleFunc("GET /api-keys", apiKeyHandler.List)
+	apiKeyRoutes.HandleFunc("DELETE /api-keys/{id}", apiKeyHandler.Revoke)
+	router.Handle("/api-keys", middleware.Authenticate([]byte(cfg.JWTSecret))(apiKeyRoutes))
+	router.Handle("/api-keys/", middleware.Authenticate([]byte(cfg.JWTSecret))(apiKeyRoutes))
 	return middleware.CORS(cfg.AllowedOrigins)(router)
 }
