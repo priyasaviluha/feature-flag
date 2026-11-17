@@ -67,6 +67,49 @@ func (r *Repository) List(ctx context.Context, environmentID string, page, limit
 	return items, total, nil
 }
 
+func (r *Repository) Snapshot(ctx context.Context, environmentID string) (Snapshot, error) {
+	tx, err := r.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return Snapshot{}, fmt.Errorf("begin configuration snapshot: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	var result Snapshot
+	var exists bool
+	err = tx.QueryRow(ctx, `
+		SELECT name, config_version, archived_at IS NULL
+		FROM environments WHERE id = $1
+	`, environmentID).Scan(&result.Environment, &result.Version, &exists)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !exists) {
+		return Snapshot{}, ErrEnvironmentNotFound
+	}
+	if err != nil {
+		return Snapshot{}, fmt.Errorf("find snapshot environment: %w", err)
+	}
+	rows, err := tx.Query(ctx, `
+		SELECT f.key, f.type, c.config, c.version, c.updated_at
+		FROM environment_feature_configs c
+		JOIN feature_definitions f ON f.id = c.feature_id
+		WHERE c.environment_id = $1 AND f.archived_at IS NULL
+		ORDER BY f.key
+	`, environmentID)
+	if err != nil {
+		return Snapshot{}, fmt.Errorf("list snapshot configurations: %w", err)
+	}
+	defer rows.Close()
+	result.Configs = make([]Configuration, 0)
+	for rows.Next() {
+		item, err := scanConfiguration(rows)
+		if err != nil {
+			return Snapshot{}, fmt.Errorf("scan snapshot configuration: %w", err)
+		}
+		result.Configs = append(result.Configs, item)
+	}
+	if err := rows.Err(); err != nil {
+		return Snapshot{}, fmt.Errorf("iterate snapshot configurations: %w", err)
+	}
+	return result, nil
+}
+
 func (r *Repository) Find(ctx context.Context, environmentID, featureKey string) (Configuration, error) {
 	var item Configuration
 	var version int64

@@ -23,3 +23,9 @@ type ListResult struct {
 	Data       []Configuration `json:"data"`
 	Pagination Pagination      `json:"pagination"`
 }
+
+type Snapshot struct {
+	Environment string
+	Version     int64
+	Configs     []Configuration
+}

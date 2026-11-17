@@ -22,6 +22,10 @@ func TestEnvironmentAndFeatureRoutesRequireAuthentication(t *testing.T) {
 		{"GET", "/api/features/00000000-0000-0000-0000-000000000001"},
 		{"PATCH", "/api/features/00000000-0000-0000-0000-000000000001"},
 		{"DELETE", "/api/features/00000000-0000-0000-0000-000000000001"},
+		{"GET", "/sdk/v1/configs"},
+		{"GET", "/sdk/v1/configs/new_checkout"},
+		{"GET", "/audit-logs"},
+		{"GET", "/audit-logs/00000000-0000-0000-0000-000000000001"},
 	} {
 		r := httptest.NewRequest(tc.method, tc.path, nil)
 		w := httptest.NewRecorder()

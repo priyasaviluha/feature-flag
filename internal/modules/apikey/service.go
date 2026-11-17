@@ -13,6 +13,7 @@ import (
 var (
 	ErrEnvironmentNotFound = errors.New("environment not found")
 	ErrAPIKeyNotFound      = errors.New("api key not found")
+	ErrAPIKeyInactive      = errors.New("api key inactive")
 	ErrInvalidPagination   = errors.New("invalid pagination")
 	ErrInvalidInput        = errors.New("invalid input")
 	ErrHashCollision       = errors.New("API key hash collision")
@@ -41,13 +42,18 @@ func (s *Service) Create(ctx context.Context, name, environmentID, adminID strin
 			return CreatedAPIKey{}, fmt.Errorf("generate API key: %w", err)
 		}
 		raw := "ff_live_" + hex.EncodeToString(secret)
-		digest := sha256.Sum256([]byte(raw))
-		result, err := s.store.Create(ctx, name, environmentID, "ff_live", hex.EncodeToString(digest[:]), adminID, raw)
+		result, err := s.store.Create(ctx, name, environmentID, "ff_live", HashKey(raw), adminID, raw)
 		if !errors.Is(err, ErrHashCollision) {
 			return result, err
 		}
 	}
 	return CreatedAPIKey{}, fmt.Errorf("generate unique API key: %w", ErrHashCollision)
+}
+
+// HashKey returns the SHA-256 hex digest used to persist API key secrets.
+func HashKey(raw string) string {
+	digest := sha256.Sum256([]byte(raw))
+	return hex.EncodeToString(digest[:])
 }
 
 func (s *Service) List(ctx context.Context, environmentID string, page, limit int64) (ListResult, error) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -13,6 +14,37 @@ import (
 type Repository struct{ db *pgxpool.Pool }
 
 func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
+
+type AuthenticatedKey struct {
+	ID            string
+	EnvironmentID string
+	Environment   string
+}
+
+func (r *Repository) Authenticate(ctx context.Context, hash string) (AuthenticatedKey, string, error) {
+	var key AuthenticatedKey
+	var status string
+	var expiresAt *time.Time
+	var archivedAt *time.Time
+	err := r.db.QueryRow(ctx, `
+		SELECT k.id, k.environment_id, e.name, k.status, k.expires_at, e.archived_at
+		FROM api_keys k JOIN environments e ON e.id = k.environment_id
+		WHERE k.key_hash = $1
+	`, hash).Scan(&key.ID, &key.EnvironmentID, &key.Environment, &status, &expiresAt, &archivedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return AuthenticatedKey{}, "", ErrAPIKeyNotFound
+	}
+	if err != nil {
+		return AuthenticatedKey{}, "", fmt.Errorf("authenticate API key: %w", err)
+	}
+	if status != "ACTIVE" || (expiresAt != nil && !expiresAt.After(time.Now())) || archivedAt != nil {
+		return AuthenticatedKey{}, status, ErrAPIKeyInactive
+	}
+	if _, err := r.db.Exec(ctx, `UPDATE api_keys SET last_used_at = CURRENT_TIMESTAMP WHERE id = $1`, key.ID); err != nil {
+		return AuthenticatedKey{}, "", fmt.Errorf("update API key usage: %w", err)
+	}
+	return key, status, nil
+}
 
 func (r *Repository) Create(ctx context.Context, name, environmentID, prefix, hash, adminID, raw string) (CreatedAPIKey, error) {
 	var result CreatedAPIKey

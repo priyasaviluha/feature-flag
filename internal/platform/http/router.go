@@ -7,9 +7,11 @@ import (
 	"flag_backend/internal/middleware"
 	"flag_backend/internal/modules/admin"
 	"flag_backend/internal/modules/apikey"
+	"flag_backend/internal/modules/audit"
 	"flag_backend/internal/modules/configuration"
 	"flag_backend/internal/modules/environment"
 	"flag_backend/internal/modules/feature"
+	"flag_backend/internal/modules/sdk"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -61,5 +63,17 @@ func NewRouter(db *pgxpool.Pool, cfg config.Config) http.Handler {
 	apiKeyRoutes.HandleFunc("DELETE /api-keys/{id}", apiKeyHandler.Revoke)
 	router.Handle("/api-keys", middleware.Authenticate([]byte(cfg.JWTSecret))(apiKeyRoutes))
 	router.Handle("/api-keys/", middleware.Authenticate([]byte(cfg.JWTSecret))(apiKeyRoutes))
+	auditRepository := audit.NewRepository(db)
+	auditHandler := audit.NewHandler(audit.NewService(auditRepository))
+	auditRoutes := http.NewServeMux()
+	auditRoutes.HandleFunc("GET /audit-logs", auditHandler.List)
+	auditRoutes.HandleFunc("GET /audit-logs/{id}", auditHandler.Get)
+	router.Handle("/audit-logs", middleware.Authenticate([]byte(cfg.JWTSecret))(auditRoutes))
+	router.Handle("/audit-logs/", middleware.Authenticate([]byte(cfg.JWTSecret))(auditRoutes))
+	sdkHandler := sdk.NewHandler(configurationRepository, configurationService)
+	sdkRoutes := http.NewServeMux()
+	sdkRoutes.HandleFunc("GET /sdk/v1/configs", sdkHandler.List)
+	sdkRoutes.HandleFunc("GET /sdk/v1/configs/{featureKey}", sdkHandler.Get)
+	router.Handle("/sdk/v1/", apikey.AuthenticateSDKKey(apiKeyRepository)(sdkRoutes))
 	return middleware.CORS(cfg.AllowedOrigins)(router)
 }
