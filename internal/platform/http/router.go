@@ -89,5 +89,5 @@ func NewRouter(db *pgxpool.Pool, cfg config.Config) http.Handler {
 	sdkRoutes.HandleFunc("GET /sdk/v1/configs", sdkHandler.List)
 	sdkRoutes.HandleFunc("GET /sdk/v1/configs/{featureKey}", sdkHandler.Get)
 	router.Handle("/sdk/v1/", apikey.AuthenticateSDKKey(apiKeyRepository)(sdkRoutes))
-	return middleware.CORS(cfg.AllowedOrigins)(router)
+	return middleware.CORS()(router)
 }
