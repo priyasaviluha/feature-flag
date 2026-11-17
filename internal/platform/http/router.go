@@ -12,6 +12,7 @@ import (
 	"flag_backend/internal/modules/environment"
 	"flag_backend/internal/modules/feature"
 	"flag_backend/internal/modules/sdk"
+	"flag_backend/internal/modules/usergroup"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -38,11 +39,24 @@ func NewRouter(db *pgxpool.Pool, cfg config.Config) http.Handler {
 	configurationRepository := configuration.NewRepository(db)
 	configurationService := configuration.NewService(configurationRepository)
 	configurationHandler := configuration.NewHandler(configurationService)
+	userGroupRepository := usergroup.NewRepository(db)
+	userGroupHandler := usergroup.NewHandler(usergroup.NewService(userGroupRepository))
 	environmentRoutes.HandleFunc("GET /api/environments/{environmentId}/configs", configurationHandler.List)
 	environmentRoutes.HandleFunc("GET /api/environments/{environmentId}/configs/{featureKey}", configurationHandler.Get)
 	environmentRoutes.HandleFunc("PUT /api/environments/{environmentId}/configs/{featureKey}", configurationHandler.Update)
+	environmentRoutes.HandleFunc("GET /api/environments/{environmentId}/features/{featureId}/groups", userGroupHandler.GetEffective)
+	environmentRoutes.HandleFunc("PUT /api/environments/{environmentId}/features/{featureId}/groups/{groupId}", userGroupHandler.PutRule)
+	environmentRoutes.HandleFunc("DELETE /api/environments/{environmentId}/features/{featureId}/groups/{groupId}", userGroupHandler.DeleteRule)
 	router.Handle("/api/environments", middleware.Authenticate([]byte(cfg.JWTSecret))(environmentRoutes))
 	router.Handle("/api/environments/", middleware.Authenticate([]byte(cfg.JWTSecret))(environmentRoutes))
+	userGroupRoutes := http.NewServeMux()
+	userGroupRoutes.HandleFunc("POST /api/user-groups", userGroupHandler.Create)
+	userGroupRoutes.HandleFunc("GET /api/user-groups", userGroupHandler.List)
+	userGroupRoutes.HandleFunc("GET /api/user-groups/{id}", userGroupHandler.Get)
+	userGroupRoutes.HandleFunc("PATCH /api/user-groups/{id}", userGroupHandler.Patch)
+	userGroupRoutes.HandleFunc("DELETE /api/user-groups/{id}", userGroupHandler.Archive)
+	router.Handle("/api/user-groups", middleware.Authenticate([]byte(cfg.JWTSecret))(userGroupRoutes))
+	router.Handle("/api/user-groups/", middleware.Authenticate([]byte(cfg.JWTSecret))(userGroupRoutes))
 
 	featureRepository := feature.NewRepository(db)
 	featureService := feature.NewService(featureRepository)
